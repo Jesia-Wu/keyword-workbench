@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>关键词工作台</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="筛选与导入">
+        <div class="brand-block">
+          <div class="brand-mark">KW</div>
+          <div>
+            <span class="script-word">Atelier</span>
+            <h1>关键词工作台</h1>
+            <p>分类、解释、处置、导出</p>
+          </div>
+        </div>
+
+        <section class="panel import-panel" aria-labelledby="import-title">
+          <div class="panel-heading">
+            <h2 id="import-title">导入</h2>
+            <button class="icon-btn" id="loadSampleBtn" type="button" title="载入示例词">示例</button>
+          </div>
+          <label class="file-drop">
+            <input id="fileInput" type="file" accept=".csv,.tsv,.txt">
+            <span>上传 CSV / TSV / TXT</span>
+            <small>自动识别 keyword、search term、关键词列</small>
+          </label>
+          <textarea id="pasteInput" placeholder="也可以直接粘贴关键词，一行一个。例如：&#10;queen bed frame&#10;no box spring needed bed frame&#10;metal bed frame with storage"></textarea>
+          <div class="button-row">
+            <button class="primary-btn" id="parsePasteBtn" type="button">解析粘贴内容</button>
+            <button class="ghost-btn" id="clearBtn" type="button">清空</button>
+          </div>
+        </section>
+
+        <section class="panel filters-panel" aria-labelledby="filters-title">
+          <div class="panel-heading">
+            <h2 id="filters-title">筛选</h2>
+            <button class="ghost-mini" id="resetFiltersBtn" type="button">重置</button>
+          </div>
+          <label>
+            搜索
+            <input id="searchInput" type="search" placeholder="关键词、中文解释、备注">
+          </label>
+          <label>
+            分类
+            <select id="categoryFilter">
+              <option value="">全部分类</option>
+            </select>
+          </label>
+          <div class="custom-category">
+            <label>
+              自定义分类
+              <input id="customCategoryInput" type="text" placeholder="例如：节日词、痛点词、防御词">
+            </label>
+            <button class="ghost-btn" id="addCategoryBtn" type="button">添加分类</button>
+          </div>
+          <div class="category-chips" id="categoryChips" aria-label="当前分类"></div>
+          <label>
+            推荐动作
+            <select id="actionFilter">
+              <option value="">全部动作</option>
+            </select>
+          </label>
+          <label>
+            状态
+            <select id="statusFilter">
+              <option value="">全部状态</option>
+            </select>
+          </label>
+        </section>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Amazon US Keyword Ops</p>
+            <p class="script-hero">Keyword Atelier</p>
+            <h2>先把词处理清楚，再做内容承接</h2>
+          </div>
+          <div class="top-actions">
+            <button class="ghost-btn" id="saveBtn" type="button">保存到本机</button>
+            <button class="primary-btn" id="exportPlanBtn" type="button">导出处理表</button>
+          </div>
+        </header>
+
+        <section class="metric-strip" aria-label="关键词概览">
+          <article>
+            <span id="totalCount">0</span>
+            <p>总关键词</p>
+          </article>
+          <article>
+            <span id="readyCount">0</span>
+            <p>可处理</p>
+          </article>
+          <article>
+            <span id="listingCount">0</span>
+            <p>Listing 埋词</p>
+          </article>
+          <article>
+            <span id="negativeCount">0</span>
+            <p>否词候选</p>
+          </article>
+        </section>
+
+        <section class="table-section">
+          <div class="table-toolbar">
+            <div>
+              <h3>关键词池</h3>
+              <p id="resultHint">还没有导入关键词</p>
+            </div>
+            <div class="export-menu">
+              <button class="ghost-btn" id="exportAllBtn" type="button">导出全部</button>
+              <button class="ghost-btn" id="exportNegativeBtn" type="button">导出否词</button>
+              <button class="ghost-btn" id="exportListingBtn" type="button">导出埋词</button>
+            </div>
+          </div>
+          <div class="table-controls">
+            <div class="pager">
+              <button class="ghost-mini" id="prevPageBtn" type="button">上一页</button>
+              <span id="pageInfo">第 1 页</span>
+              <button class="ghost-mini" id="nextPageBtn" type="button">下一页</button>
+            </div>
+            <label class="page-size-label">
+              每页
+              <select id="pageSizeSelect">
+                <option value="100">100</option>
+                <option value="200">200</option>
+                <option value="500">500</option>
+                <option value="all">全部</option>
+              </select>
+            </label>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>关键词</th>
+                  <th>搜索量</th>
+                  <th>中文解释</th>
+                  <th>分类</th>
+                  <th>处理动作</th>
+                  <th>状态</th>
+                  <th>备注</th>
+                </tr>
+              </thead>
+              <tbody id="keywordTable"></tbody>
+            </table>
+            <div class="empty-state" id="emptyState">
+              <strong>先导入一批关键词</strong>
+              <p>粘贴一行一个关键词，或上传 CSV / TSV 文件。系统会先做轻量分类和关键词处置建议。</p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <aside class="detail-panel" aria-label="关键词详情">
+        <div class="detail-card">
+          <div class="detail-top">
+            <p class="eyebrow">Selected Term</p>
+            <button class="icon-btn" id="copyTermBtn" type="button" title="复制关键词">复制</button>
+          </div>
+          <h2 id="detailKeyword">未选择关键词</h2>
+          <p id="detailMeaning">点击表格中的关键词查看说明。</p>
+          <dl>
+            <div>
+              <dt>搜索量</dt>
+              <dd id="detailVolume">暂无</dd>
+            </div>
+            <div>
+              <dt>判断依据</dt>
+              <dd id="detailReason">暂无</dd>
+            </div>
+            <div>
+              <dt>建议用法</dt>
+              <dd id="detailUsage">暂无</dd>
+            </div>
+            <div>
+              <dt>适合放置</dt>
+              <dd id="detailPlacement">暂无</dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="rules-card">
+          <h3>当前规则</h3>
+          <ul>
+            <li>不做复盘看板。</li>
+            <li>动作只保留关键词处置建议。</li>
+            <li>可人工覆盖分类、动作、状态和备注。</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
