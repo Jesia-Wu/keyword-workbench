@@ -327,6 +327,82 @@ function splitRow(row, delimiter) {
   return cells;
 }
 
+async function readUploadedText(file) {
+  const buffer = await file.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+
+  if (isLikelyExcelWorkbook(bytes)) {
+    throw new Error("检测到 Excel 工作簿文件，请先另存为 CSV / TSV / TXT 后再上传");
+  }
+
+  return decodeText(bytes);
+}
+
+function isLikelyExcelWorkbook(bytes) {
+  return bytes.length >= 4 &&
+    bytes[0] === 0x50 &&
+    bytes[1] === 0x4b &&
+    bytes[2] === 0x03 &&
+    bytes[3] === 0x04;
+}
+
+function decodeText(bytes) {
+  if (hasBom(bytes, [0xef, 0xbb, 0xbf])) return decodeWith("utf-8", bytes);
+  if (hasBom(bytes, [0xff, 0xfe])) return decodeWith("utf-16le", bytes);
+  if (hasBom(bytes, [0xfe, 0xff])) return decodeWith("utf-16be", bytes);
+
+  if (looksLikeUtf16(bytes)) {
+    return decodeWith(countEvenZeroBytes(bytes) > countOddZeroBytes(bytes) ? "utf-16be" : "utf-16le", bytes);
+  }
+
+  const candidates = ["utf-8", "gb18030", "big5"];
+  return candidates
+    .map((encoding) => {
+      const text = decodeWith(encoding, bytes);
+      return { text, score: scoreDecodedText(text) };
+    })
+    .sort((a, b) => b.score - a.score)[0].text;
+}
+
+function decodeWith(encoding, bytes) {
+  return new TextDecoder(encoding).decode(bytes).replace(/^\ufeff/, "");
+}
+
+function hasBom(bytes, bom) {
+  return bom.every((byte, index) => bytes[index] === byte);
+}
+
+function looksLikeUtf16(bytes) {
+  const sampleLength = Math.min(bytes.length, 200);
+  if (sampleLength < 4) return false;
+  const zeroBytes = countEvenZeroBytes(bytes, sampleLength) + countOddZeroBytes(bytes, sampleLength);
+  return zeroBytes / sampleLength > 0.2;
+}
+
+function countEvenZeroBytes(bytes, sampleLength = Math.min(bytes.length, 200)) {
+  let count = 0;
+  for (let index = 0; index < sampleLength; index += 2) {
+    if (bytes[index] === 0) count += 1;
+  }
+  return count;
+}
+
+function countOddZeroBytes(bytes, sampleLength = Math.min(bytes.length, 200)) {
+  let count = 0;
+  for (let index = 1; index < sampleLength; index += 2) {
+    if (bytes[index] === 0) count += 1;
+  }
+  return count;
+}
+
+function scoreDecodedText(text) {
+  const replacementCount = (text.match(/\ufffd/g) || []).length;
+  const controlCount = (text.match(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g) || []).length;
+  const chineseHeaderHits = (text.match(/关键词|搜索词|搜索量|月搜索量/g) || []).length;
+  const delimiterHits = (text.match(/,|\t|\r?\n/g) || []).length;
+  return chineseHeaderHits * 30 + delimiterHits - replacementCount * 20 - controlCount * 10;
+}
+
 function filteredKeywords() {
   const query = normalizeTerm(els.searchInput.value);
   const category = els.categoryFilter.value;
@@ -592,9 +668,14 @@ els.loadSampleBtn.addEventListener("click", () => {
 els.fileInput.addEventListener("change", async (event) => {
   const file = event.target.files[0];
   if (!file) return;
-  const text = await file.text();
-  mergeKeywords(parseDelimited(text), file.name);
-  event.target.value = "";
+  try {
+    const text = await readUploadedText(file);
+    mergeKeywords(parseDelimited(text), file.name);
+  } catch (error) {
+    showToast(error.message || "文件读取失败，请检查文件格式");
+  } finally {
+    event.target.value = "";
+  }
 });
 
 els.clearBtn.addEventListener("click", () => {
