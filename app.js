@@ -652,8 +652,9 @@ function updateItem(id, field, value) {
 }
 
 function saveLocal(message = "已保存到本机浏览器") {
+  const toastMessage = typeof message === "string" ? message : "已保存到本机浏览器";
   localStorage.setItem(STORAGE_KEY, JSON.stringify({ keywords, selectedId, categories }));
-  showToast(message);
+  showToast(toastMessage);
 }
 
 function loadLocal() {
@@ -772,7 +773,7 @@ els.clearBtn.addEventListener("click", () => {
   render();
 });
 
-els.saveBtn.addEventListener("click", saveLocal);
+els.saveBtn.addEventListener("click", () => saveLocal());
 
 els.addCategoryBtn.addEventListener("click", () => {
   if (addCategory(els.customCategoryInput.value, { selectFilter: true })) {
