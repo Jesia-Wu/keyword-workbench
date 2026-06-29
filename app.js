@@ -1,4 +1,5 @@
 const STORAGE_KEY = "keyword-workbench-v1";
+const SIDEBAR_COLLAPSED_KEY = "keyword-workbench-sidebar-collapsed";
 
 const defaultCategories = [
   "核心类目词",
@@ -54,6 +55,8 @@ let keywords = [];
 let selectedId = null;
 
 const els = {
+  appShell: document.querySelector(".app-shell"),
+  sidebarToggle: document.getElementById("sidebarToggle"),
   fileInput: document.getElementById("fileInput"),
   pasteInput: document.getElementById("pasteInput"),
   parsePasteBtn: document.getElementById("parsePasteBtn"),
@@ -219,8 +222,9 @@ function createKeyword(term, source = "手工导入", extras = {}) {
     term: normalized,
     searchVolume: normalizeSearchVolume(extras.searchVolume),
     source,
-    note: "",
-    ...profile
+    note: extras.note || "",
+    ...profile,
+    ...normalizeImportedFields(extras)
   };
 }
 
@@ -235,13 +239,19 @@ function mergeKeywords(newTerms, source) {
     if (!normalized) return;
     if (existing.has(normalized)) {
       const current = existing.get(normalized);
-      if (searchVolume && current.searchVolume !== searchVolume) {
-        current.searchVolume = searchVolume;
-        updated += 1;
-      }
+      const updates = normalizeImportedFields(entry);
+      if (searchVolume) updates.searchVolume = searchVolume;
+      let changed = false;
+      Object.entries(updates).forEach(([field, value]) => {
+        if (value && current[field] !== value) {
+          current[field] = value;
+          changed = true;
+        }
+      });
+      if (changed) updated += 1;
       return;
     }
-    const created = createKeyword(normalized, source, { searchVolume });
+    const created = createKeyword(normalized, source, { ...entry, searchVolume });
     additions.push(created);
     existing.set(normalized, created);
   });
@@ -253,14 +263,35 @@ function mergeKeywords(newTerms, source) {
 
 function getEntryTerm(entry) {
   if (typeof entry === "object" && entry !== null) {
-    return entry.term || entry.keyword || entry.searchTerm || entry["关键词"] || entry["搜索词"];
+    return entry.term || entry.keyword || entry.keywords || entry.searchTerm || entry.customerSearchTerm || entry.keywordPhrase || entry["关键词"] || entry["关键词词组"] || entry["关键词组"] || entry["搜索词"] || entry["搜索词组"];
   }
   return entry;
 }
 
 function getEntrySearchVolume(entry) {
   if (typeof entry !== "object" || entry === null) return "";
-  return entry.searchVolume || entry.volume || entry.monthlySearches || entry["搜索量"] || entry["月搜索量"];
+  return entry.searchVolume || entry.volume || entry.monthlySearches || entry.monthlySearchVolume || entry["搜索量"] || entry["月搜索量"] || entry["搜索热度"] || entry["搜索频次"];
+}
+
+function normalizeImportedFields(entry) {
+  if (typeof entry !== "object" || entry === null) return {};
+  const imported = {};
+  const meaning = entry.meaning || entry.chineseMeaning || entry.translation || entry.explanation || entry["中文解释"] || entry["中文翻译"] || entry["解释"] || entry["翻译"];
+  const category = entry.category || entry.group || entry["分类"] || entry["词组分类"];
+  const action = entry.action || entry.recommendedAction || entry["处理动作"] || entry["推荐动作"] || entry["动作"];
+  const status = entry.status || entry["状态"] || entry["当前状态"];
+  const placement = entry.placement || entry["适合放置"] || entry["放置位置"];
+  const reason = entry.reason || entry["判断依据"] || entry["原因"];
+  const note = entry.note || entry.remark || entry.memo || entry["备注"];
+
+  if (meaning) imported.meaning = String(meaning).trim();
+  if (category) imported.category = normalizeCategoryName(category) || String(category).trim();
+  if (action) imported.action = normalizeActionValue(action);
+  if (status) imported.status = normalizeStatusValue(status);
+  if (placement) imported.placement = String(placement).trim();
+  if (reason) imported.reason = String(reason).trim();
+  if (note) imported.note = String(note).trim();
+  return imported;
 }
 
 function parseDelimited(text) {
@@ -274,20 +305,22 @@ function parseDelimited(text) {
   const delimiter = text.includes("\t") ? "\t" : ",";
   const first = splitRow(rows[0], delimiter);
   const normalizedHeaders = first.map((cell) => normalizeTerm(cell));
-  const keywordIndex = normalizedHeaders.findIndex((header) =>
-    ["keyword", "keywords", "search term", "customer search term", "关键词", "搜索词"].includes(header)
-  );
-  const searchVolumeIndex = normalizedHeaders.findIndex((header) =>
-    ["search volume", "search_volume", "monthly searches", "monthly_searches", "monthly search volume", "volume", "搜索量", "月搜索量", "搜索热度", "搜索频次"].includes(header)
-  );
+  const headerMap = {
+    term: findHeaderIndex(normalizedHeaders, ["keyword", "keywords", "keyword phrase", "keyword group", "search term", "customer search term", "关键词", "关键词词组", "关键词组", "搜索词", "搜索词组"]),
+    searchVolume: findHeaderIndex(normalizedHeaders, ["search volume", "search_volume", "monthly searches", "monthly_searches", "monthly search volume", "volume", "搜索量", "月搜索量", "搜索热度", "搜索频次"]),
+    meaning: findHeaderIndex(normalizedHeaders, ["chinese meaning", "meaning", "translation", "explanation", "中文解释", "中文翻译", "解释", "翻译"]),
+    category: findHeaderIndex(normalizedHeaders, ["category", "group", "分类", "词组分类"]),
+    action: findHeaderIndex(normalizedHeaders, ["recommended action", "recommended_action", "action", "处理动作", "推荐动作", "动作"]),
+    status: findHeaderIndex(normalizedHeaders, ["status", "状态", "当前状态"]),
+    placement: findHeaderIndex(normalizedHeaders, ["placement", "适合放置", "放置位置"]),
+    reason: findHeaderIndex(normalizedHeaders, ["reason", "判断依据", "原因"]),
+    note: findHeaderIndex(normalizedHeaders, ["note", "remark", "memo", "备注"])
+  };
 
-  if (keywordIndex >= 0) {
+  if (headerMap.term >= 0) {
     return rows.slice(1).map((row) => {
       const cells = splitRow(row, delimiter);
-      return {
-        term: cells[keywordIndex],
-        searchVolume: searchVolumeIndex >= 0 ? cells[searchVolumeIndex] : ""
-      };
+      return buildEntryFromHeaderMap(cells, headerMap);
     }).filter((entry) => entry.term);
   }
 
@@ -302,6 +335,28 @@ function parseDelimited(text) {
   }
 
   return rows;
+}
+
+function findHeaderIndex(headers, aliases) {
+  return headers.findIndex((header) => aliases.includes(header));
+}
+
+function buildEntryFromHeaderMap(cells, headerMap) {
+  return {
+    term: cells[headerMap.term] || "",
+    searchVolume: getCell(cells, headerMap.searchVolume),
+    meaning: getCell(cells, headerMap.meaning),
+    category: getCell(cells, headerMap.category),
+    action: getCell(cells, headerMap.action),
+    status: getCell(cells, headerMap.status),
+    placement: getCell(cells, headerMap.placement),
+    reason: getCell(cells, headerMap.reason),
+    note: getCell(cells, headerMap.note)
+  };
+}
+
+function getCell(cells, index) {
+  return index >= 0 ? cells[index] || "" : "";
 }
 
 function splitRow(row, delimiter) {
@@ -657,6 +712,14 @@ function showToast(message) {
   window.setTimeout(() => toast.classList.remove("show"), 1800);
 }
 
+function setSidebarCollapsed(collapsed) {
+  els.appShell.classList.toggle("sidebar-collapsed", collapsed);
+  els.sidebarToggle.textContent = collapsed ? "展开" : "收起";
+  els.sidebarToggle.setAttribute("aria-expanded", String(!collapsed));
+  els.sidebarToggle.title = collapsed ? "展开左侧导入和筛选" : "收起左侧导入和筛选";
+  localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+}
+
 els.parsePasteBtn.addEventListener("click", () => {
   mergeKeywords(parseDelimited(els.pasteInput.value), "粘贴导入");
 });
@@ -746,6 +809,7 @@ els.pageSizeSelect.addEventListener("input", () => {
 });
 
 els.keywordTable.addEventListener("click", (event) => {
+  if (event.target.closest("input, select, button, textarea")) return;
   const row = event.target.closest("tr");
   if (!row) return;
   selectedId = row.dataset.id;
@@ -756,6 +820,7 @@ els.keywordTable.addEventListener("change", (event) => {
   const field = event.target.dataset.field;
   const row = event.target.closest("tr");
   if (!field || !row) return;
+  selectedId = row.dataset.id;
   updateItem(row.dataset.id, field, event.target.value);
 });
 
@@ -763,6 +828,7 @@ els.keywordTable.addEventListener("input", (event) => {
   const field = event.target.dataset.field;
   const row = event.target.closest("tr");
   if (!field || !row || event.target.tagName === "SELECT") return;
+  selectedId = row.dataset.id;
   updateItem(row.dataset.id, field, event.target.value);
 });
 
@@ -773,10 +839,15 @@ els.copyTermBtn.addEventListener("click", async () => {
   showToast("已复制关键词");
 });
 
+els.sidebarToggle.addEventListener("click", () => {
+  setSidebarCollapsed(!els.appShell.classList.contains("sidebar-collapsed"));
+});
+
 renderOptions();
 loadLocal();
 syncCategoriesFromKeywords();
 renderOptions();
+setSidebarCollapsed(localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
 render();
 
 function debounce(fn, delay) {

@@ -54,11 +54,46 @@ button {
   padding: 18px;
 }
 
+.app-shell.sidebar-collapsed {
+  grid-template-columns: 54px minmax(580px, 1fr) 340px;
+}
+
 .sidebar,
 .detail-panel {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.sidebar {
+  align-self: start;
+  position: sticky;
+  top: 18px;
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+}
+
+.sidebar-toggle {
+  align-self: flex-end;
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.sidebar-collapsed .sidebar {
+  align-items: stretch;
+  overflow: visible;
+}
+
+.sidebar-collapsed .sidebar > :not(.sidebar-toggle) {
+  display: none;
+}
+
+.sidebar-collapsed .sidebar-toggle {
+  width: 54px;
+  min-height: 86px;
+  padding: 8px 0;
+  writing-mode: vertical-rl;
+  letter-spacing: 0;
 }
 
 .brand-block,
@@ -512,6 +547,10 @@ td input {
   font-size: 13px;
 }
 
+td select {
+  min-width: 104px;
+}
+
 .tag {
   display: inline-flex;
   align-items: center;
@@ -611,6 +650,10 @@ dd {
     grid-template-columns: 280px minmax(0, 1fr);
   }
 
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+
   .detail-panel {
     grid-column: 1 / -1;
     display: grid;
@@ -622,6 +665,17 @@ dd {
   .app-shell {
     grid-template-columns: 1fr;
     padding: 10px;
+  }
+
+  .app-shell.sidebar-collapsed {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar-collapsed .sidebar-toggle {
+    width: auto;
+    min-height: 34px;
+    padding: 0 12px;
+    writing-mode: horizontal-tb;
   }
 
   .topbar,
