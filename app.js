@@ -518,6 +518,10 @@ function addCategory(value, options = {}) {
 }
 
 function syncCategoriesFromKeywords() {
+  keywords = keywords
+    .filter((item) => !isLegacyHeaderRow(item))
+    .map((item) => migrateLegacyImportedItem(item));
+
   keywords.forEach((item) => {
     const category = normalizeCategoryName(item.category);
     if (category && !categories.some((existing) => existing.toLowerCase() === category.toLowerCase())) {
@@ -527,6 +531,26 @@ function syncCategoriesFromKeywords() {
     item.action = normalizeActionValue(item.action);
     item.status = normalizeStatusValue(item.status);
   });
+}
+
+function isLegacyHeaderRow(item) {
+  const term = normalizeTerm(item.term);
+  return ["keyword", "keywords", "keyword phrase", "keyword group", "search term", "customer search term", "关键词", "关键词词组", "关键词组", "搜索词", "搜索词组"].includes(term);
+}
+
+function migrateLegacyImportedItem(item) {
+  const migrated = { ...item };
+  const searchVolume = String(migrated.searchVolume || "").trim();
+  const meaning = String(migrated.meaning || "").trim();
+  const hasTextInSearchVolume = /[\u4e00-\u9fffA-Za-z]/.test(searchVolume) && !/^\d[\d,.\s]*$/.test(searchVolume);
+  const hasGeneratedMeaning = !meaning || meaning === "需要结合产品进一步判断" || meaning === "暂未命中明确规则，建议人工复核。";
+
+  if (hasTextInSearchVolume && hasGeneratedMeaning) {
+    migrated.meaning = searchVolume;
+    migrated.searchVolume = "";
+  }
+
+  return migrated;
 }
 
 function render() {
